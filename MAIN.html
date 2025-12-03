@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Irrigation System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* Custom Tailwind styles */
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'f-green-light': '#EBF5EE',
+                        'f-green': '#4CAF50',
+                        'f-green-dark': '#388E3C',
+                        'f-blue': '#2196F3',
+                        'f-blue-dark': '#1976D2',
+                        'f-warn': '#FF9800',
+                        'f-danger': '#F44336',
+                    },
+                    keyframes: {
+                        pulse: {
+                            '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+                            '50%': { opacity: 0.8, transform: 'scale(1.02)' },
+                        }
+                    },
+                    animation: {
+                        pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+        
+        /* Base styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        
+        body.dark-mode {
+            background-color: #111827;
+        }
+
+        /* Hide all pages by default */
+        .page {
+            display: none;
+        }
+        
+        /* Show the active page */
+        .page.active {
+            display: block;
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background-color: white;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid #e5e7eb;
+            z-index: 1000;
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 4px 2px; /* Added horizontal padding */
+            flex: 1; /* Makes all 7 items share space equally */
+            text-align: center;
+        }
+        
+        .nav-item .icon {
+            font-size: 1.25rem;
+            margin-bottom: 2px;
+        }
+        
+        .nav-item.active {
+            color: #4CAF50; /* Farmer Green */
+        }
+        
+        /* Dark mode styles for nav */
+        body.dark-mode .bottom-nav {
+            background-color: #1f2937;
+            border-top-color: #374151;
+        }
+        body.dark-mode .nav-item {
+            color: #9ca3af;
+        }
+         body.dark-mode .nav-item.active {
+            color: #4CAF50;
+        }
+        
+        /* Page content padding */
+        .page-content {
+            padding-bottom: 80px; /* 60px nav + 20px padding */
+        }
+        
+        /* --- CSS BUG FIX for Help Pages --- */
+        .help-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .help-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #388E3C; /* Dark Green */
+            margin-bottom: 0.5rem;
+        }
+        
+        /* This rule fixes the white text bug */
+        .help-card p, .help-card li, .help-card ol {
+            color: #111827; /* Dark text */
+        }
+        
+        body.dark-mode .help-card {
+            background-color: #1f2937;
+        }
+        body.dark-mode .help-card h3 {
+            color: #4CAF50;
+        }
+        /* This rule fixes the white text bug in dark mode */
+        body.dark-mode .help-card p, body.dark-mode .help-card li, body.dark-mode .help-card ol {
+            color: #d1d5db; /* Light text */
+        }
+        /* --- End of CSS Bug Fix --- */
+        
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        /* Wind Compass */
+        #wind-compass {
+            width: 180px;
+            height: 180px;
+            border: 4px solid #e5e7eb;
+            border-radius: 50%;
+            position: relative;
+            margin: 1rem auto;
+        }
+        body.dark-mode #wind-compass { border-color: #374151; }
+        .compass-rose { width: 100%; height: 100%; position: relative; }
+        .compass-label {
+            position: absolute;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #6b7280;
+        }
+        body.dark-mode .compass-label { color: #9ca3af; }
+        .compass-label.n { top: 3px; left: 50%; transform: translateX(-50%); }
+        .compass-label.s { bottom: 3px; left: 50%; transform: translateX(-50%); }
+        .compass-label.e { top: 50%; right: 3px; transform: translateY(-50%); }
+        .compass-label.w { top: 50%; left: 3px; transform: translateY(-50%); }
+        
+        #wind-arrow {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 0; height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 70px solid #F44336; /* Red arrow */
+            transform-origin: bottom center;
+            transform: translate(-50%, -100%) rotate(0deg);
+            transition: transform 0.5s ease;
+        }
+        #wind-data {
+            text-align: center;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #wind-speed { font-size: 1.5rem; font-weight: 600; }
+        #wind-dir { font-size: 1.1rem; color: #6b7280; }
+        body.dark-mode #wind-dir { color: #9ca3af; }
+        
+        /* --- Simulator Styles --- */
+        .sim-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        .sim-block {
+            padding: 1rem;
+            border: 3px solid #cbd5e1;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.2s ease-out;
+        }
+        body.dark-mode .sim-block { border-color: #4b5563; }
+        .sim-arrow {
+            font-size: 2.5rem;
+            color: #cbd5e1;
+            text-align: center;
+            margin: 0.5rem 0;
+            transition: all 0.2s ease-out;
+        }
+        body.dark-mode .sim-arrow { color: #4b5563; }
+        
+        /* Active States */
+        .sim-block.active-sensor { border-color: #FF9800; background-color: #fffbeb; }
+        body.dark-mode .sim-block.active-sensor { background-color: #78350f; border-color: #FF9800; }
+        
+        .sim-block.active-logic { border-color: #2196F3; background-color: #eff6ff; animation: pulse 1s ease-out; }
+        body.dark-mode .sim-block.active-logic { background-color: #1e3a8a; border-color: #2196F3; }
+
+        .sim-block.active-action { border-color: #4CAF50; background-color: #f0fdf4; }
+        body.dark-mode .sim-block.active-action { background-color: #166534; border-color: #4CAF50; }
+
+        .sim-block.active-fail { border-color: #F44336; background-color: #fef2f2; }
+        body.dark-mode .sim-block.active-fail { background-color: #991b1b; border-color: #F44336; }
+
+        .sim-arrow.active { color: #2196F3; }
+        
+        /* Tab buttons */
+        .tab-button {
+            flex: 1;
+            padding: 0.75rem 0.5rem;
+            font-weight: 600;
+            color: #6b7280;
+            background-color: #e5e7eb;
+            border-bottom: 3px solid transparent;
+        }
+        body.dark-mode .tab-button {
+            color: #d1d5db;
+            background-color: #374151;
+        }
+        .tab-button.active {
+            color: #388E3C;
+            background-color: white;
+            border-bottom-color: #4CAF50;
+        }
+        body.dark-mode .tab-button.active {
+            color: #f0f0f0;
+            background-color: #1f2937;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+    <header class="bg-white dark:bg-gray-800 shadow sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center">
+                <i class="fa-solid fa-leaf text-3xl text-f-green"></i>
+                <h1 class="ml-2 text-xl font-bold text-f-green-dark dark:text-f-green-light">Smart Irrigation System</h1>
+            </div>
+            <div id="dark-mode-toggle" class="cursor-pointer text-xl text-gray-600 dark:text-gray-300">
+                <i class="fa-solid fa-moon"></i>
+                <i class="fa-solid fa-sun hidden"></i>
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content max-w-7xl mx-auto p-4">
+
+        <div id="page-home" class="page active">
+            
+            <div id="system-status-card" class="rounded-lg p-6 mb-4 text-white text-center shadow-lg transition-all duration-300">
+                <div class="text-4xl mb-2">
+                    <i id="system-status-icon" class="fa-solid fa-circle-check"></i>
+                </div>
+                <h2 id="system-status-text" class="text-2xl font-bold">All Good!</h2>
+                <p id="system-status-note" class="text-sm opacity-90">System is running in AUTOMATIC mode.</p>
+            </div>
+            
+            <div id="weather-alert-card" class="rounded-lg p-4 mb-4 text-center shadow hidden bg-f-blue text-white">
+                <div class="flex items-center justify-center">
+                    <i id="weather-alert-icon" class="fa-solid fa-cloud-showers-heavy text-3xl mr-3"></i>
+                    <span id="weather-alert-text" class="font-semibold">Rain expected today. Watering is paused.</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow text-center">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Soil Moisture</h3>
+                    <div id="soil-value" class="text-3xl font-bold text-f-green-dark dark:text-f-green-light my-2">--%</div>
+                    <div id="soil-status-text" class="text-xs text-gray-500 dark:text-gray-400">Dry</div>
+                </div>
+                
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow text-center">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Water Tank</h3>
+                    <div id="water-value" class="text-3xl font-bold text-f-blue-dark dark:text-f-blue my-2">--%</div>
+                    <div id="water-status-text" class="text-xs text-gray-500 dark:text-gray-400">Full</div>
+                </div>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                <h3 class="text-lg font-semibold mb-2">Quick Summary</h3>
+                <ul class="space-y-2 text-sm">
+                    <li class="flex justify-between">
+                        <span class="text-gray-600 dark:text-gray-300">Temperature:</span>
+                        <strong id="temp-value" class="dark:text-white">-- °C</strong>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-600 dark:text-gray-300">Power Source:</span>
+                        <strong id="power-source-value" class="dark:text-white">--</strong>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="text-gray-600 dark:text-gray-300">Meter Reading:</span>
+                        <strong id="meter-reading-value" class="dark:text-white">-- kWh</strong>
+                    </li>
+                    <li class="flex justify-between items-center mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span class="text-xs text-gray-500 dark:text-gray-400">Last Updated:</span>
+                        <strong id="last-updated" class="text-xs font-bold text-f-green dark:text-f-green-light">--:--:--</strong>
+                    </li>
+                </ul>
+            </div>
+            
+        </div>
+
+        <div id="page-controls" class="page">
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h2 class="text-lg font-semibold mb-3 text-center">System Mode</h2>
+                <select id="system-mode-select" class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg text-lg bg-gray-50 dark:bg-gray-700">
+                    <option value="OFFLINE">Turn System OFF</option>
+                    <option value="MANUAL">Manual Control (Use Buttons)</option>
+                    <option value="AUTOMATIC">Automatic Mode (Recommended)</option>
+                </select>
+                <p class="text-xs text-center mt-2 text-gray-500 dark:text-gray-400">Automatic mode will water your fields by itself.</p>
+            </div>
+
+            <div id="manual-controls-card" class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h2 class="text-lg font-semibold mb-3 text-center">Irrigation Valves (Manual)</h2>
+                <div id="manual-controls-disabled-note" class="text-center p-3 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-300 text-sm">
+                    Enable "Manual Control" mode above to use these buttons.
+                </div>
+                
+                <div id="manual-controls-buttons" class="space-y-3 mt-3">
+                    <button id="valve-1-toggle" data-valve="1" class="valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200" disabled>
+                        <i class="fa-solid fa-carrot mr-2"></i> Zone 1 (Vegetables)
+                    </button>
+                    <button id="valve-2-toggle" data-valve="2" class="valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200" disabled>
+                        <i class="fa-solid fa-wheat-awn mr-2"></i> Zone 2 (Crops)
+                    </button>
+                    <button id="valve-3-toggle" data-valve="3" class="valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200" disabled>
+                        <i class="fa-solid fa-tree mr-2"></i> Zone 3 (Orchard)
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-3 text-center">Farm Logbook</h2>
+                <select id="logbook-activity" class="w-full p-3 mb-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700">
+                    <option value="Watered">Watered</option>
+                    <option value="Fertilized">Fertilized</option>
+                    <option value="Sprayed Pesticide">Sprayed Pesticide</option>
+                    <option value="Observation">Observation</option>
+                </select>
+                <textarea id="logbook-notes" class="w-full p-2 mb-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700" rows="2" placeholder="Add a note... (e.g., 'Zone 1 only')"></textarea>
+                <button id="logbook-save" class="w-full p-3 rounded-lg text-lg font-bold bg-f-blue-dark text-white hover:bg-f-blue">Save to Log</button>
+                <div id="logbook-history" class="mt-4 max-h-40 overflow-y-auto space-y-2">
+                    <p class="text-xs text-center text-gray-500 dark:text-gray-400">Your saved notes will appear here.</p>
+                </div>
+            </div>
+            
+        </div>
+        
+        <div id="page-cropcare" class="page">
+            <h2 class="text-xl font-bold mb-4">Crop Care Advisor</h2>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-3">1. Select Your Crop</h3>
+                <select id="crop-select" class="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg text-lg bg-gray-50 dark:bg-gray-700">
+                    <option value="">-- Select a Crop --</option>
+                    <option value="cotton">Cotton</option>
+                    <option value="rice">Rice</option>
+                    <option value="tomatoes">Tomatoes</option>
+                    <option value="wheat">Wheat</option>
+                </select>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-3">2. Current Field Conditions</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Temperature</div>
+                        <div id="cropcare-temp" class="text-2xl font-bold">-- °C</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Humidity</div>
+                        <div id="cropcare-humidity" class="text-2xl font-bold">-- %</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex w-full mb-4 rounded-lg overflow-hidden shadow">
+                <button id="tab-btn-pest" class="tab-button active" data-tab="pesticides">
+                    <i class="fa-solid fa-bug mr-1"></i> Pest & Disease
+                </button>
+                <button id="tab-btn-fert" class="tab-button" data-tab="fertilizer">
+                    <i class="fa-solid fa-seedling mr-1"></i> Fertilizer
+                </button>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                <div id="tab-content-pesticides" class="tab-content active">
+                    <h3 class="text-lg font-semibold mb-3">Risk & Suggestions</h3>
+                    <div id="pesticide-suggestions-container" class="space-y-3">
+                        <p class="text-gray-500 dark:text-gray-400 text-center">Please select a crop to see risks.</p>
+                    </div>
+                </div>
+                <div id="tab-content-fertilizer" class="tab-content">
+                    <h3 class="text-lg font-semibold mb-3">Growth Stage & Suggestions</h3>
+                    <select id="fertilizer-stage-select" class="w-full p-3 mb-3 border border-gray-300 dark:border-gray-600 rounded-lg text-lg bg-gray-50 dark:bg-gray-700">
+                        <option value="">-- Select Growth Stage --</option>
+                        </select>
+                    <div id="fertilizer-suggestions-container" class="space-y-3">
+                        <p class="text-gray-500 dark:text-gray-400 text-center">Please select a crop and stage.</p>
+                    </div>
+                </div>
+                
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-4 italic">
+                    **Disclaimer:** Always consult a local agricultural expert before applying any pesticide or fertilizer. These are suggestions based on sensor data, not a diagnosis.
+                </p>
+            </div>
+        </div>
+
+        <div id="page-sensors" class="page">
+            <h2 class="text-xl font-bold mb-4">Infrastructure Status</h2>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-2 text-center">Water Tank System</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center">
+                        <div id="tank-level-gauge" class="text-5xl font-bold text-f-blue-dark dark:text-f-blue my-2">--%</div>
+                        <div id="tank-level-status" class="text-sm font-medium text-gray-500 dark:text-gray-400">Unknown</div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-center">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Refill Pump (Motor 1)</div>
+                            <div id="tank-pump-status-text" class="text-lg font-bold mt-1">OFF</div>
+                        </div>
+                        <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                            <span class="font-bold">Auto-Refill</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-refill-toggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button id="manual-fill-btn" class="w-full p-3 rounded-lg text-lg font-bold bg-f-blue text-white hover:bg-f-blue-dark mt-4">
+                    <i class="fa-solid fa-play mr-2"></i> Manual Fill (10 Min)
+                </button>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-2 text-center">Power System</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-center">
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Power Source</div>
+                        <div id="power-source-icon" class="text-3xl my-2 text-f-warn"><i class="fa-solid fa-solar-panel"></i></div>
+                        <div id="power-source-status" class="font-bold">SOLAR</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-center">
+                        <div class="text-sm text-gray-500 dark:text-gray-400">Grid Status</div>
+                        <div id="grid-status-icon" class="text-3xl my-2 text-f-green"><i class="fa-solid fa-plug-circle-check"></i></div>
+                        <div id="grid-status-text" class="font-bold">CONNECTED</div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                        <div class="flex items-center">
+                            <i id="power-battery-icon" class="fa-solid fa-battery-full text-2xl text-f-green mr-3"></i>
+                            <div>
+                                <div class="font-bold">Battery</div>
+                                <div id="power-battery-status" class="text-xs text-gray-500 dark:text-gray-400">Good</div>
+                            </div>
+                        </div>
+                        <div id="power-battery-value" class="text-xl font-bold">-- V</div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h4 class="text-md font-semibold text-center mb-2">Energy Meter</h4>
+                    <div class="bg-blue-100 dark:bg-blue-900 border-l-4 border-f-blue-dark text-f-blue-dark dark:text-blue-200 p-4 rounded-lg">
+                        <div class="flex justify-between items-center">
+                            <span class="text-lg font-bold">Total Usage:</span>
+                            <span id="meter-reading-kwh" class="text-2xl font-bold">--.- kWh</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-semibold mb-2">Power History</h3>
+                    <div class="chart-container">
+                        <canvas id="power-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-2 text-center">Weather Station</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div id="wind-compass">
+                        <div class="compass-rose">
+                            <span class="compass-label n">N</span>
+                            <span class="compass-label s">S</span>
+                            <span class="compass-label e">E</span>
+                            <span class="compass-label w">W</span>
+                            <div id="wind-arrow"></div>
+                            <div id="wind-data">
+                                <div id="wind-speed" class="value text-gray-900 dark:text-gray-100">--</div>
+                                <div class="text-sm text-gray-600 dark:text-gray-300">kph</div>
+                                <div id="wind-dir" class="label">---</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-center">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Rainfall</div>
+                            <div id="weather-rain" class="text-2xl font-bold mt-1">--</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">mm/hr</div>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg text-center">
+                            <div class="text-sm text-gray-500 dark:text-gray-400">Light</div>
+                            <div id="weather-light" class="text-2xl font-bold mt-1">--</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">lux</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="page-history" class="page">
+            <h2 class="text-xl font-bold mb-4">Data History</h2>
+            
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4">
+                <h3 class="text-lg font-semibold mb-2">Soil & Water History</h3>
+                 <div class="chart-container">
+                    <canvas id="main-chart"></canvas>
+                </div>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <div class="p-4 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold">Full Data Log</h3>
+                    <a id="export-csv" class="bg-f-green-dark text-white px-3 py-1 rounded text-sm font-medium hover:bg-f-green">
+                        <i class="fa-solid fa-download mr-1"></i> Export
+                    </a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="history-table" class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-300 uppercase">
+                            <tr id="history-table-header">
+                                </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="dark:text-gray-200">
+                            </tbody>
+                    </table>
+                </div>
+                <div id="pagination-controls" class="p-4 flex justify-between items-center text-sm">
+                    <button id="prev-page-btn" class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-600 disabled:opacity-50">Prev</button>
+                    <span id="page-info" class="text-gray-600 dark:text-gray-300">Page 1 of 1</span>
+                    <button id="next-page-btn" class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-600 disabled:opacity-50">Next</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-simulator" class="page">
+            <h2 class="text-xl font-bold mb-4">System Test Lab</h2>
+            
+            <div class="help-card">
+                <h3 class="text-center">How the System Thinks</h3>
+                <p class="text-center mb-4">Press a "Test" button to see how the system makes a decision.</p>
+                
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-inner">
+                    <h4 class="text-lg font-semibold text-center text-gray-600 dark:text-gray-300 mb-2">1. Sensor Inputs</h4>
+                    <div class="sim-grid">
+                        <div id="sim-soil" class="sim-block"><i class="fa-solid fa-carrot mr-2"></i>Soil</div>
+                        <div id="sim-water" class="sim-block"><i class="fa-solid fa-tint mr-2"></i>Water Tank</div>
+                        <div id="sim-rain" class="sim-block"><i class="fa-solid fa-cloud-rain mr-2"></i>Rain</div>
+                        <div id="sim-temp" class="sim-block"><i class="fa-solid fa-temperature-half mr-2"></i>Temp</div>
+                    </div>
+                    
+                    <div class="sim-arrow"><i id="sim-arrow-1" class="fa-solid fa-arrow-down"></i></div>
+
+                    <h4 class="text-lg font-semibold text-center text-gray-600 dark:text-gray-300 mb-2">2. Control Box Logic</h4>
+                    <div id="sim-logic" class="sim-block">
+                        <i class="fa-solid fa-brain mr-2"></i>
+                        <span id="sim-status">Waiting for test...</span>
+                    </div>
+
+                    <div class="sim-arrow"><i id="sim-arrow-2" class="fa-solid fa-arrow-down"></i></div>
+
+                    <h4 class="text-lg font-semibold text-center text-gray-600 dark:text-gray-300 mb-2">3. Outputs</h4>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div id="sim-valve-1" class="sim-block"><i class="fa-solid fa-faucet-drip mr-1"></i>Zone 1</div>
+                        <div id="sim-valve-2" class="sim-block"><i class="fa-solid fa-faucet-drip mr-1"></i>Zone 2</div>
+                        <div id="sim-valve-3" class="sim-block"><i class="fa-solid fa-faucet-drip mr-1"></i>Zone 3</div>
+                    </div>
+                    <div id="sim-tank-pump" class="sim-block mt-2">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> Tank Refill Pump (Motor 1)
+                    </div>
+                </div>
+
+                <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <button id="sim-btn-dry" class="p-3 rounded-lg bg-yellow-500 text-white font-bold text-lg">Test: Soil is Dry</button>
+                    <button id="sim-btn-rain" class="p-3 rounded-lg bg-blue-500 text-white font-bold text-lg">Test: It is Raining</button>
+                    <button id="sim-btn-empty" class="p-3 rounded-lg bg-red-500 text-white font-bold text-lg">Test: Tank is Empty</button>
+                </div>
+                <p class="text-xs text-center text-gray-500 dark:text-gray-400 mt-2">This will add a new event to your "History" page.</p>
+            </div>
+        </div>
+
+        <div id="page-help" class="page">
+            <h2 class="text-xl font-bold mb-4">Help & Support</h2>
+            
+            <div class="help-card">
+                <h3>How to use this App?</h3>
+                <p>Use the navigation bar at the bottom to switch pages:</p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong class="text-f-green">Home:</strong> See the status of your soil, water tank, and weather.</li>
+                    <li><strong class="text-f-green">Controls:</strong> Turn the system ON (Automatic) or OFF and write in your Farm Log.</li>
+                    <li><strong class="text-f-green">Crop Care:</strong> Get advice on Pesticides and Fertilizers.</li>
+                    <li><strong class="text-f-green">Sensors:</strong> Check your Weather Station and Power status.</li>
+                    <li><strong class="text-f-green">History:</strong> See all old data and charts.</li>
+                    <li><strong class="text-f-green">Test Lab:</strong> Run tests to see how the system thinks.</li>
+                    <li><strong class="text-f-green">Help:</strong> You are here! Get help and find support.</li>
+                </ul>
+            </div>
+            
+            <div class="help-card">
+                <h3>What is "Automatic Mode"?</h3>
+                <p>This is the <strong>recommended</strong> mode. When you set the system to "Automatic" (on the 'Controls' page), the system will decide *when* to water your fields.</p>
+                <p class="mt-2">It checks the soil. If the soil is too dry, it will automatically turn ON the water. It will turn OFF when the soil is wet enough. It also **stops watering if it starts to rain**.</p>
+                <p class="mt-2">If your water tank gets low, the **Auto-Refill** (on the 'Sensors' page) will automatically turn on the tank pump (Motor 1) to fill it from your well or bore.</p>
+            </div>
+
+            <h2 class="text-xl font-bold mt-6 mb-4">Customer Support</h2>
+            <div class="help-card text-center">
+                <h3>We are here to help you!</h3>
+                <p class="mb-4">If you have any problem or any question, please contact us.</p>
+                
+                <a href="tel:+919876543210" class="w-full text-left p-4 rounded-lg bg-f-green text-white text-lg font-bold flex items-center mb-3">
+                    <i class="fa-solid fa-phone text-2xl w-8 text-center mr-3"></i>
+                    <div>
+                        <div>Call Us Now</div>
+                        <div class="text-sm font-normal opacity-90">+91 98765 43210</div>
+                    </div>
+                </a>
+                
+                <a href="https://wa.me/919876543210" class="w-full text-left p-4 rounded-lg bg-green-500 text-white text-lg font-bold flex items-center">
+                    <i class="fa-brands fa-whatsapp text-3xl w-8 text-center mr-3"></i>
+                    <div>
+                        <div>Message on WhatsApp</div>
+                        <div class="text-sm font-normal opacity-90">Start a chat with our team</div>
+                    </div>
+                </a>
+            </div>
+            
+            <h2 class="text-xl font-bold mt-6 mb-4">Government Schemes & Loans</h2>
+            <div class="help-card">
+                <h3>Pradhan Mantri Krishi Sinchayee Yojana (PMKSY)</h3>
+                <p>This is a major central government scheme to help farmers get irrigation ("Har Khet Ko Pani") and use water better ("Per Drop, More Crop").</p>
+                <p class="mt-2">You can get a large subsidy (up to 55-75%) on the cost of drip irrigation, sprinklers, and automation systems like this one. Contact your local agriculture office for the application form.</p>
+            </div>
+        </div>
+        
+    </main>
+
+    <nav class="bottom-nav shadow-inner">
+        <div class="nav-item active" data-page="home">
+            <i class="icon fa-solid fa-house"></i>
+            <span>Home</span>
+        </div>
+        <div class="nav-item" data-page="controls">
+            <i class="icon fa-solid fa-sliders"></i>
+            <span>Controls</span>
+        </div>
+        <div class="nav-item" data-page="cropcare">
+            <i class="icon fa-solid fa-leaf"></i>
+            <span>Crop Care</span>
+        </div>
+        <div class="nav-item" data-page="sensors">
+            <i class="icon fa-solid fa-rss"></i>
+            <span>Sensors</span>
+        </div>
+        <div class="nav-item" data-page="history">
+            <i class="icon fa-solid fa-chart-line"></i>
+            <span>History</span>
+        </div>
+        <div class="nav-item" data-page="simulator">
+            <i class="icon fa-solid fa-cogs"></i>
+            <span>Test Lab</span>
+        </div>
+        <div class="nav-item" data-page="help">
+            <i class="icon fa-solid fa-circle-question"></i>
+            <span>Help</span>
+        </div>
+    </nav>
+
+
+    <script>
+        // --- GLOBAL VARIABLES ---
+        
+        // Default CSV data embedded
+        const defaultCSVString = `timestamp,soil_moisture_percent,temperature_c,humidity_percent,water_level_percent,light_lux,pressure_hpa,wind_speed_kph,wind_direction,rain_mm_per_hour,valve_1_status,valve_2_status,valve_3_status,tank_pump_status,tank_pump_relay,system_mode,battery_voltage,solar_voltage,power_source,grid_voltage_v,total_power_consumption_kwh,note
+2025-10-30T10:00:00Z,55,25.1,60,80,15000,1012.1,5.2,NNE,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,4.10,16.5,Solar,0.0,10.10,Initial state
+2025-10-30T10:05:00Z,50,25.3,62,79,14800,1012.2,5.5,N,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,4.09,16.2,Solar,0.0,10.10,Drying
+2025-10-30T10:10:00Z,45,25.5,65,78,14600,1012.3,5.0,N,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,4.08,16.8,Solar,0.0,10.10,Drying
+2025-10-30T10:15:00Z,40,25.7,68,77,14500,1012.2,5.8,NNE,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,4.07,17.0,Solar,0.0,10.10,Drying
+2025-10-30T10:20:00Z,35,25.9,70,76,14300,1012.1,6.1,NE,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,3.90,17.1,Solar,0.0,10.10,Trigger threshold
+2025-10-30T10:25:00Z,38,25.8,72,75,14400,1012.0,6.0,NE,0.0,ON,OFF,OFF,OFF,LOW,AUTOMATIC,3.80,16.9,Battery,0.0,10.10,Auto: Zone 1 ON
+2025-10-30T10:30:00Z,45,25.6,75,73,14500,1012.1,5.5,NNE,0.0,ON,OFF,OFF,OFF,LOW,AUTOMATIC,3.75,16.5,Battery,0.0,10.15,Irrigating
+2025-10-30T10:35:00Z,55,25.4,78,71,14700,1012.2,5.2,N,0.0,ON,OFF,OFF,OFF,LOW,AUTOMATIC,3.70,16.8,Battery,0.0,10.20,Reached 50%
+2025-10-30T10:40:00Z,65,25.3,80,69,14900,1012.3,5.1,N,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,3.78,17.0,Solar,0.0,10.20,Auto: Zone 1 OFF
+2025-10-30T10:45:00Z,62,25.3,82,68,15100,1012.3,5.3,NNW,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,3.80,17.2,Solar,0.0,10.20,Stable
+2025-10-30T10:50:00Z,58,26.0,85,18,12000,1011.0,7.0,W,0.5,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.82,14.0,Solar,0.0,10.20,Tank level low, pump on
+2025-10-30T10:55:00Z,59,25.8,88,25,10000,1011.0,7.2,W,1.5,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.85,10.0,Solar,0.0,10.20,Raining, tank filling
+2025-10-30T11:00:00Z,60,25.5,90,35,8000,1011.2,7.5,W,2.5,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.88,8.0,Solar,0.0,10.20,Auto-OFF: Raining
+2025-10-30T11:05:00Z,62,25.2,85,45,13000,1011.5,6.0,NW,0.0,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.90,15.0,Solar,0.0,10.20,Rain stopped, tank filling
+2025-10-30T11:10:00Z,58,25.8,80,55,14000,1011.8,5.5,NW,0.0,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.92,16.0,Solar,0.0,10.20,Drying again
+2025-10-30T11:15:00Z,54,26.1,78,65,15000,1012.0,5.0,N,0.0,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.95,16.5,Solar,0.0,10.20,Drying
+2025-10-30T11:20:00Z,50,26.3,75,75,15500,1012.1,5.1,N,0.0,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,3.98,17.0,Solar,0.0,10.20,Drying
+2025-10-30T11:25:00Z,45,26.5,72,85,16000,1012.0,5.3,NNE,0.0,OFF,OFF,OFF,ON,HIGH,AUTOMATIC,4.00,17.1,Solar,0.0,10.20,Drying
+2025-10-30T11:30:00Z,40,26.7,70,96,16200,1011.9,5.5,NE,0.0,OFF,OFF,OFF,OFF,LOW,AUTOMATIC,4.02,17.3,Solar,0.0,10.20,Tank full, pump off
+2025-10-30T11:35:00Z,38,26.8,68,95,16000,1011.8,5.8,NE,0.0,ON,OFF,OFF,OFF,LOW,AUTOMATIC,3.40,17.0,Grid,228.5,10.25,Auto: Zone 1 ON, Battery low, switch to Grid`;
+
+        // --- Global State ---
+        let dataset = [];
+        let headers = [];
+        let simulationInterval = null;
+        let systemMode = 'OFFLINE'; // OFFLINE, MANUAL, AUTOMATIC
+        let isAutoRefill = true; // NEW: Global state for tank pump
+        let mainChartInstance = null;
+        let powerChartInstance = null;
+        
+        let currentPage = 1;
+        const rowsPerPage = 5; // Less rows per page
+        
+        let autoConfig = { 
+            onSoil: 40, offSoil: 50, onWater: 15, offWater: 10, // Irrigation
+            tankLow: 20, tankHigh: 95 // NEW: Tank Refill
+        };
+        let selectedCrop = ""; // Global crop setting
+
+        // --- Pest & Fertilizer Database ---
+        const cropDatabase = {
+            'cotton': {
+                pests: [
+                    { pest: 'Aphids', risk: (d) => d.humidity > 70 && d.temp < 25, factors: 'High humidity, cool temp', chemical: 'Neem Oil, Imidacloprid' },
+                    { pest: 'Bollworm', risk: (d) => d.temp > 25 && d.temp < 32, factors: 'Warm temperatures', chemical: 'Emamectin Benzoate' },
+                    { pest: 'Whitefly', risk: (d) => d.humidity > 60 && d.temp > 28, factors: 'Warm & humid', chemical: 'Pyriproxyfen' }
+                ],
+                fertilizers: [
+                    { stage: 'Seedling (0-30 days)', suggestion: 'High Phosphorus (e.g., DAP). Apply 50kg/acre.' },
+                    { stage: 'Flowering (30-70 days)', suggestion: 'Balanced NPK (e.g., 19-19-19). Apply 60kg/acre.' },
+                    { stage: 'Boll Formation (70+ days)', suggestion: 'High Potassium (e.g., MOP). Apply 40kg/acre.' }
+                ]
+            },
+            'rice': {
+                pests: [
+                    { pest: 'Brown Planthopper', risk: (d) => d.temp > 25 && d.humidity > 75, factors: 'Warm & high humidity', chemical: 'Pymetrozine, Dinotefuran' },
+                    { pest: 'Rice Blast', risk: (d) => d.humidity > 85 && d.temp > 20, factors: 'Very high humidity', chemical: 'Tricyclazole' }
+                ],
+                fertilizers: [
+                    { stage: 'Tillering (15-40 days)', suggestion: 'High Nitrogen (e.g., Urea). Apply 40kg/acre.' },
+                    { stage: 'Panicle Initiation (45-60 days)', suggestion: 'Apply Potassium (e.g., MOP). Apply 25kg/acre.' }
+                ]
+            },
+            'tomatoes': {
+                pests: [
+                    { pest: 'Late Blight', risk: (d) => d.temp < 22 && d.humidity > 80, factors: 'Cool & very wet', chemical: 'Mancozeb, Copper Oxychloride' },
+                    { pest: 'Spider Mites', risk: (d) => d.temp > 27 && d.humidity < 50, factors: 'Hot & dry conditions', chemical: 'Abamectin, Spiromesifen' }
+                ],
+                fertilizers: [
+                    { stage: 'Transplanting (0-20 days)', suggestion: 'High Phosphorus (e.g., DAP). Apply 30kg/acre.' },
+                    { stage: 'Flowering (20-50 days)', suggestion: 'Balanced NPK + Calcium. Apply 40kg/acre.' },
+                    { stage: 'Fruiting (50+ days)', suggestion: 'High Potassium (e.g., SOP). Apply 50kg/acre.' }
+                ]
+            },
+            'wheat': {
+                pests: [
+                    { pest: 'Wheat Rust', risk: (d) => d.temp > 15 && d.humidity > 60, factors: 'Mild temp & high humidity', chemical: 'Propiconazole, Tebuconazole' },
+                    { pest: 'Aphids', risk: (d) => d.humidity > 65 && d.temp < 24, factors: 'Humid, cool temp', chemical: 'Neem Oil, Thiamethoxam' }
+                ],
+                fertilizers: [
+                    { stage: 'Crown Root (20-25 days)', suggestion: '1st dose Nitrogen (e.g., Urea). Apply 50kg/acre.' },
+                    { stage: 'Booting (60-70 days)', suggestion: '2nd dose Nitrogen (e.g., Urea). Apply 50kg/acre.' }
+                ]
+            }
+        };
+
+        // --- DOM Element Variables ---
+        let pages, navItems,
+            systemStatusCard, systemStatusIcon, systemStatusText, systemStatusNote,
+            weatherAlertCard, weatherAlertIcon, weatherAlertText,
+            soilValue, soilStatusText, waterValue, waterStatusText,
+            tempValue, rainValue, batteryValue, lastUpdated,
+            powerSourceValue, meterReadingValue,
+            systemModeSelect, manualControlsDisabledNote, manualControlsButtons, valveToggles,
+            logbookActivity, logbookNotes, logbookSave, logbookHistory,
+            cropSelect, cropcareTemp, cropcareHumidity,
+            tabBtnPest, tabBtnFert, tabContentPest, tabContentFert,
+            pesticideSuggestionsContainer, fertilizerStageSelect, fertilizerSuggestionsContainer,
+            windSpeed, windDir, windArrow, weatherRain, weatherLight, weatherPressure,
+            powerSourceIcon, powerSourceStatus, gridStatusIcon, gridStatusText,
+            powerBatteryIcon, powerBatteryValue, powerBatteryStatus,
+            powerSolarIcon, powerSolarValue, powerSolarStatus, meterReadingKwh,
+            tankLevelGauge, tankLevelStatus, tankPumpStatusText, autoRefillToggle, manualFillBtn,
+            mainChartCanvas, powerChartCanvas, historyTableHeader, historyTableBody,
+            prevPageBtn, nextPageBtn, pageInfo, exportCsvBtn,
+            simBtnDry, simBtnRain, simBtnEmpty, simStatus,
+            simSoil, simWater, simRain, simTemp, simLogic, 
+            simValve1, simValve2, simValve3, simTankPump, simArrow1, simArrow2,
+            darkModeToggle;
+
+
+        // --- Utility Functions ---
+        const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+        const formatTimestamp = (isoString) => new Date(isoString).toLocaleString();
+        
+        function logEvent(message, type = 'event') {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        const getLastRow = () => (dataset.length === 0) ? null : dataset[dataset.length - 1];
+
+        // --- Core UI Update Functions ---
+
+        function updateAllUI() {
+            if (dataset.length === 0) {
+                resetUI();
+                return;
+            }
+            const lastRow = getLastRow();
+            
+            updateSystemStatus(lastRow);
+            updateHomePageCards(lastRow);
+            updateWeatherAlert(lastRow);
+            updateControlsPage(lastRow);
+            
+            // Update pages *if* they are active
+            if (document.getElementById('page-sensors').classList.contains('active')) {
+                updateSensorsPage(lastRow);
+            }
+            if (document.getElementById('page-cropcare').classList.contains('active')) {
+                updateCropCarePage(); // This will read the global lastRow
+            }
+            if (document.getElementById('page-history').classList.contains('active')) {
+                updateChartData('main');
+                renderHistoryTable();
+            }
+            
+            lastUpdated.textContent = new Date().toLocaleTimeString();
+        }
+        
+        function resetUI() {
+            systemStatusCard.className = "rounded-lg p-6 mb-4 text-white text-center shadow-lg transition-all duration-300 bg-gray-500";
+            systemStatusIcon.className = "fa-solid fa-power-off";
+            systemStatusText.textContent = "Offline";
+            systemStatusNote.textContent = "No data received. Waiting for connection...";
+            
+            // ... (rest of resetUI)
+        }
+        
+        function updateSystemStatus(lastRow) {
+            systemMode = lastRow.system_mode || 'OFFLINE';
+            systemModeSelect.value = systemMode;
+            
+            const isWatering = lastRow.valve_1_status === 'ON' || lastRow.valve_2_status === 'ON' || lastRow.valve_3_status === 'ON';
+            const isRefilling = lastRow.tank_pump_status === 'ON';
+            const water = parseFloat(lastRow.water_level_percent);
+
+            let statusClass, statusIcon, statusText, statusNote;
+
+            if (systemMode === 'OFFLINE') {
+                statusClass = 'bg-gray-500'; statusIcon = 'fa-power-off';
+                statusText = 'System Offline'; statusNote = 'The system is turned off.';
+            } else if (water <= autoConfig.offWater && !isRefilling) {
+                statusClass = 'bg-f-danger'; statusIcon = 'fa-triangle-exclamation';
+                statusText = 'CRITICAL: Tank Empty!'; statusNote = 'System stopped. Please refill the water tank.';
+            } else if (isRefilling) {
+                statusClass = 'bg-f-blue-dark animate-pulse'; statusIcon = 'fa-solid fa-fill-drip';
+                statusText = 'Refilling Tank...'; statusNote = 'Tank motor (Motor 1) is ON.';
+            } else if (lastRow.rain_mm_per_hour > 0.1) {
+                statusClass = 'bg-f-blue'; statusIcon = 'fa-cloud-showers-heavy';
+                statusText = 'Raining'; statusNote = 'Watering is paused automatically.';
+            } else if (isWatering) {
+                statusClass = 'bg-f-blue animate-pulse'; statusIcon = 'fa-faucet-drip';
+                statusText = 'Watering Active';
+                let zones = [];
+                if(lastRow.valve_1_status === 'ON') zones.push("Zone 1");
+                if(lastRow.valve_2_status === 'ON') zones.push("Zone 2");
+                if(lastRow.valve_3_status === 'ON') zones.push("Zone 3");
+                statusNote = `Watering ${zones.join(', ')}...`;
+            } else if (water < autoConfig.tankLow) { // Use tankLow for warning
+                statusClass = 'bg-f-warn'; statusIcon = 'fa-tint-slash';
+                statusText = 'WARNING: Tank Low'; statusNote = 'Refill water tank soon.';
+            } else if (systemMode === 'AUTOMATIC') {
+                statusClass = 'bg-f-green'; statusIcon = 'fa-circle-check';
+                statusText = 'All Good!'; statusNote = 'System is running in AUTOMATIC mode.';
+            } else if (systemMode === 'MANUAL') {
+                statusClass = 'bg-gray-700'; statusIcon = 'fa-hand';
+                statusText = 'Manual Mode'; statusNote = 'Go to \'Controls\' page to water fields.';
+            }
+
+            systemStatusCard.className = `rounded-lg p-6 mb-4 text-white text-center shadow-lg transition-all duration-300 ${statusClass}`;
+            systemStatusIcon.className = `fa-solid ${statusIcon}`;
+            systemStatusText.textContent = statusText;
+            systemStatusNote.textContent = statusNote;
+        }
+
+        function updateHomePageCards(lastRow) {
+            const soil = parseFloat(lastRow.soil_moisture_percent);
+            soilValue.textContent = `${soil.toFixed(0)}%`;
+            soilStatusText.textContent = soil < autoConfig.onSoil ? 'Soil is DRY' : 'Soil is Good';
+            if(soil < autoConfig.onSoil) { soilValue.classList.add('text-f-danger'); soilValue.classList.remove('text-f-green-dark', 'dark:text-f-green-light'); }
+            else { soilValue.classList.remove('text-f-danger'); soilValue.classList.add('text-f-green-dark', 'dark:text-f-green-light'); }
+            
+            const water = parseFloat(lastRow.water_level_percent);
+            waterValue.textContent = `${water.toFixed(0)}%`;
+            if (water <= autoConfig.tankLow) { // Changed to tankLow
+                waterStatusText.textContent = 'Tank is LOW';
+                waterValue.classList.add('text-f-danger');
+                waterValue.classList.remove('text-f-blue-dark', 'dark:text-f-blue', 'text-f-warn');
+            } else {
+                waterStatusText.textContent = 'Tank is Good';
+                waterValue.classList.remove('text-f-danger', 'text-f-warn');
+                waterValue.classList.add('text-f-blue-dark', 'dark:text-f-blue');
+            }
+            
+            tempValue.textContent = `${parseFloat(lastRow.temperature_c).toFixed(1)} °C`;
+            rainValue.textContent = `${parseFloat(lastRow.rain_mm_per_hour).toFixed(1)} mm/hr`;
+            batteryValue.textContent = `${parseFloat(lastRow.battery_voltage).toFixed(2)} V`;
+            powerSourceValue.textContent = lastRow.power_source;
+            meterReadingValue.textContent = `${parseFloat(lastRow.total_power_consumption_kwh).toFixed(2)} kWh`;
+        }
+        
+        function updateWeatherAlert(lastRow) {
+            const wind = parseFloat(lastRow.wind_speed_kph);
+            if (wind > 25) { // High wind alert
+                weatherAlertCard.classList.remove('hidden', 'bg-f-blue');
+                weatherAlertCard.classList.add('bg-f-warn');
+                weatherAlertIcon.className = 'fa-solid fa-wind text-3xl mr-3';
+                weatherAlertText.textContent = `High Wind Alert! (${wind.toFixed(1)} kph).`;
+            } else {
+                weatherAlertCard.classList.add('hidden');
+            }
+        }
+        
+        function updateControlsPage(lastRow) {
+            if (systemMode === 'MANUAL') {
+                manualControlsDisabledNote.classList.add('hidden');
+                manualControlsButtons.classList.remove('hidden');
+                
+                valveToggles.forEach(toggle => {
+                    toggle.disabled = false;
+                    const valveNum = toggle.dataset.valve;
+                    const isValveOn = lastRow[`valve_${valveNum}_status`] === 'ON';
+                    
+                    if (isValveOn) {
+                        toggle.className = "valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200 bg-f-danger text-white";
+                        toggle.innerHTML = `<i class="fa-solid fa-stop mr-2"></i> STOP Zone ${valveNum}`;
+                    } else {
+                        toggle.className = "valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200 bg-f-green text-white";
+                        toggle.innerHTML = `<i class="fa-solid fa-play mr-2"></i> START Zone ${valveNum}`;
+                    }
+                });
+                
+            } else {
+                manualControlsDisabledNote.classList.remove('hidden');
+                manualControlsButtons.classList.add('hidden');
+                
+                valveToggles.forEach(toggle => {
+                    toggle.disabled = true;
+                    toggle.className = "valve-toggle w-full p-4 rounded-lg text-lg font-bold transition-all duration-200 bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400";
+                    const valveNum = toggle.dataset.valve;
+                    const iconMap = { '1': 'fa-carrot', '2': 'fa-wheat-awn', '3': 'fa-tree' };
+                    const iconClass = `fa-solid ${iconMap[valveNum]}`;
+                    toggle.innerHTML = `<i class="${iconClass} mr-2"></i> Zone ${valveNum}`;
+                });
+            }
+        }
+
+        function updateSensorsPage(lastRow) {
+            // Water Tank System
+            const water = parseFloat(lastRow.water_level_percent);
+            tankLevelGauge.textContent = `${water.toFixed(0)}%`;
+            if (water <= autoConfig.tankLow) {
+                tankLevelStatus.textContent = 'Tank is LOW';
+                tankLevelGauge.classList.add('text-f-danger');
+                tankLevelGauge.classList.remove('text-f-blue-dark', 'dark:text-f-blue', 'text-f-warn');
+            } else {
+                tankLevelStatus.textContent = 'Tank is Good';
+                tankLevelGauge.classList.remove('text-f-danger', 'text-f-warn');
+                tankLevelGauge.classList.add('text-f-blue-dark', 'dark:text-f-blue');
+            }
+            
+            if (lastRow.tank_pump_status === 'ON') {
+                tankPumpStatusText.textContent = "ON - REFILLING";
+                tankPumpStatusText.classList.add('text-f-blue', 'animate-pulse');
+                tankPumpStatusText.classList.remove('text-gray-500');
+            } else {
+                tankPumpStatusText.textContent = "OFF";
+                tankPumpStatusText.classList.remove('text-f-blue', 'animate-pulse');
+                tankPumpStatusText.classList.add('text-gray-500');
+            }
+            autoRefillToggle.checked = isAutoRefill;
+            manualFillBtn.disabled = (systemMode === 'OFFLINE');
+
+            // Weather
+            windSpeed.textContent = parseFloat(lastRow.wind_speed_kph).toFixed(1);
+            windDir.textContent = lastRow.wind_direction;
+            weatherRain.textContent = parseFloat(lastRow.rain_mm_per_hour).toFixed(1);
+            weatherLight.textContent = parseFloat(lastRow.light_lux).toFixed(0);
+            
+            const dirMap = { 'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5, 'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5, 'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5, 'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5 };
+            const rotation = dirMap[lastRow.wind_direction] || 0;
+            windArrow.style.transform = `translate(-50%, -100%) rotate(${rotation}deg)`;
+            
+            // Power
+            powerSourceStatus.textContent = lastRow.power_source;
+            if (lastRow.power_source === 'Solar') {
+                powerSourceIcon.className = "text-3xl my-2 text-f-warn fa-solid fa-solar-panel";
+            } else if (lastRow.power_source === 'Grid') {
+                powerSourceIcon.className = "text-3xl my-2 text-f-blue fa-solid fa-plug";
+            } else {
+                powerSourceIcon.className = "text-3xl my-2 text-f-green fa-solid fa-battery-half";
+            }
+
+            const gridV = parseFloat(lastRow.grid_voltage_v);
+            if (gridV > 50) {
+                gridStatusText.textContent = "CONNECTED";
+                gridStatusIcon.className = "text-3xl my-2 text-f-green fa-solid fa-plug-circle-check";
+            } else {
+                gridStatusText.textContent = "OFFLINE";
+                gridStatusIcon.className = "text-3xl my-2 text-f-danger fa-solid fa-plug-circle-xmark";
+            }
+            
+            const batt = parseFloat(lastRow.battery_voltage);
+            powerBatteryValue.textContent = `${batt.toFixed(2)} V`;
+            if (batt < 3.2) {
+                powerBatteryStatus.textContent = "Very Low";
+                powerBatteryIcon.className = "fa-solid fa-battery-empty text-2xl text-f-danger mr-3";
+            } else if (batt < 3.5) {
+                powerBatteryStatus.textContent = "Low";
+                powerBatteryIcon.className = "fa-solid fa-battery-quarter text-2xl text-f-warn mr-3";
+            } else if (batt < 3.8) {
+                powerBatteryStatus.textContent = "OK";
+                powerBatteryIcon.className = "fa-solid fa-battery-half text-2xl text-f-blue mr-3";
+            } else {
+                powerBatteryStatus.textContent = "Good";
+                powerBatteryIcon.className = "fa-solid fa-battery-full text-2xl text-f-green mr-3";
+            }
+            
+            meterReadingKwh.textContent = `${parseFloat(lastRow.total_power_consumption_kwh).toFixed(2)} kWh`;
+        }
+        
+        // --- Crop Care Page Update ---
+        function updateCropCarePage() {
+            const lastRow = getLastRow();
+            if (!lastRow) return;
+
+            const temp = parseFloat(lastRow.temperature_c);
+            const humidity = parseFloat(lastRow.humidity_percent);
+            cropcareTemp.textContent = `${temp.toFixed(1)} °C`;
+            cropcareHumidity.textContent = `${humidity.toFixed(0)} %`;
+
+            selectedCrop = cropSelect.value;
+            if (!selectedCrop) {
+                pesticideSuggestionsContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 text-center">Please select a crop to see risks.</p>`;
+                fertilizerSuggestionsContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 text-center">Please select a crop to see suggestions.</p>`;
+                fertilizerStageSelect.innerHTML = `<option value="">-- Select Crop First --</option>`;
+                return;
+            }
+
+            const cropData = cropDatabase[selectedCrop];
+            if (!cropData) return;
+
+            // 1. Update Pest Suggestions
+            let pestHtml = '';
+            if(cropData.pests.length === 0) {
+                pestHtml = `<p class="text-gray-500 dark:text-gray-400 text-center">No pest data available for this crop.</p>`;
+            } else {
+                cropData.pests.forEach(pest => {
+                    const data = { temp, humidity };
+                    const isAtRisk = pest.risk(data);
+                    
+                    let riskClass = 'bg-f-green text-white';
+                    let riskText = 'Low Risk';
+                    if (isAtRisk) {
+                        riskClass = 'bg-f-danger text-white animate-pulse';
+                        riskText = 'High Risk';
+                    }
+
+                    pestHtml += `
+                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="text-lg font-bold">${pest.pest}</h4>
+                                <span class="text-sm font-bold px-3 py-1 rounded-full ${riskClass}">${riskText}</span>
+                            </div>
+                            <p class="text-sm text-gray-600 dark:text-gray-300 mb-1"><strong>Risk Factors:</strong> ${pest.factors}</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-300"><strong>Suggestion:</strong> ${pest.chemical}</p>
+                        </div>
+                    `;
+                });
+            }
+            pesticideSuggestionsContainer.innerHTML = pestHtml;
+
+            // 2. Update Fertilizer Dropdown
+            if (fertilizerStageSelect.options.length <= 1 || fertilizerStageSelect.dataset.crop !== selectedCrop) {
+                fertilizerStageSelect.dataset.crop = selectedCrop;
+                fertilizerStageSelect.innerHTML = `<option value="">-- Select Growth Stage --</option>`;
+                cropData.fertilizers.forEach(fert => {
+                    const option = document.createElement('option');
+                    option.value = fert.stage;
+                    option.textContent = fert.stage;
+                    fertilizerStageSelect.appendChild(option);
+                });
+            }
+            // 3. Trigger update for fertilizer suggestion
+            updateFertilizerSuggestions();
+        }
+        
+        function updateFertilizerSuggestions() {
+            const selectedCrop = cropSelect.value;
+            const selectedStage = fertilizerStageSelect.value;
+            
+            if (!selectedCrop || !selectedStage) {
+                fertilizerSuggestionsContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 text-center">Please select a crop and stage.</p>`;
+                return;
+            }
+            
+            const suggestion = cropDatabase[selectedCrop].fertilizers.find(f => f.stage === selectedStage);
+            
+            if (suggestion) {
+                fertilizerSuggestionsContainer.innerHTML = `
+                    <div class="border border-f-green-dark dark:border-f-green bg-f-green-light dark:bg-gray-800 p-4 rounded-lg">
+                        <h4 class="text-lg font-bold text-f-green-dark dark:text-f-green-light mb-2">Suggestion for ${selectedStage}:</h4>
+                        <p class="text-base text-gray-800 dark:text-gray-100">${suggestion.suggestion}</p>
+                    </div>
+                `;
+            } else {
+                fertilizerSuggestionsContainer.innerHTML = `<p class="text-gray-500 dark:text-gray-400 text-center">No suggestion for this stage.</p>`;
+            }
+        }
+        
+        // --- Charting ---
+        function initCharts() {
+            try {
+                const isDark = document.body.classList.contains('dark-mode');
+                const gridColor = isDark ? '#4b5563' : '#e5e7eb';
+                const textColor = isDark ? '#d1d5db' : '#374151';
+                
+                const chartOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'hour', displayFormats: { hour: 'MMM d, hA' } },
+                            ticks: { color: textColor, maxRotation: 0, minRotation: 0, autoSkip: true, maxTicksLimit: 5 },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            ticks: { color: textColor },
+                            grid: { color: gridColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: textColor } }
+                    }
+                };
+                
+                if (mainChartInstance) mainChartInstance.destroy();
+                mainChartInstance = new Chart(mainChartCanvas, {
+                    type: 'line',
+                    data: { labels: [], datasets: [
+                        { label: 'Soil (%)', data: [], borderColor: '#388E3C', tension: 0.1 },
+                        { label: 'Water Tank (%)', data: [], borderColor: '#1976D2', tension: 0.1 }
+                    ]},
+                    options: chartOptions
+                });
+                
+                if (powerChartInstance) powerChartInstance.destroy();
+                powerChartInstance = new Chart(powerChartCanvas, {
+                    type: 'line',
+                    data: { labels: [], datasets: [
+                        { label: 'Battery (V)', data: [], borderColor: '#FF9800', tension: 0.1 },
+                        { label: 'Solar (V)', data: [], borderColor: '#fca311', tension: 0.1 }
+                    ]},
+                    options: chartOptions
+                });
+            } catch (e) {
+                console.error("Error initializing charts:", e);
+            }
+        }
+        
+        function updateChartData(chartName) {
+            if (!mainChartInstance || !powerChartInstance) return;
+            
+            const labels = dataset.map(row => new Date(row.timestamp));
+            const isDark = document.body.classList.contains('dark-mode');
+            const gridColor = isDark ? '#4b5563' : '#e5e7eb';
+            const textColor = isDark ? '#d1d5db' : '#374151';
+
+            if (chartName === 'main' && mainChartInstance) {
+                mainChartInstance.data.labels = labels;
+                mainChartInstance.data.datasets[0].data = dataset.map(r => parseFloat(r.soil_moisture_percent));
+                mainChartInstance.data.datasets[1].data = dataset.map(r => parseFloat(r.water_level_percent));
+                mainChartInstance.options.scales.x.ticks.color = textColor;
+                mainChartInstance.options.scales.x.grid.color = gridColor;
+                mainChartInstance.options.scales.y.ticks.color = textColor;
+                mainChartInstance.options.scales.y.grid.color = gridColor;
+                mainChartInstance.options.plugins.legend.labels.color = textColor;
+                mainChartInstance.update('none');
+            }
+            
+            if (chartName === 'power' && powerChartInstance) {
+                powerChartInstance.data.labels = labels;
+                powerChartInstance.data.datasets[0].data = dataset.map(r => parseFloat(r.battery_voltage));
+                powerChartInstance.data.datasets[1].data = dataset.map(r => parseFloat(r.solar_voltage));
+                powerChartInstance.options.scales.x.ticks.color = textColor;
+                powerChartInstance.options.scales.x.grid.color = gridColor;
+                powerChartInstance.options.scales.y.ticks.color = textColor;
+                powerChartInstance.options.scales.y.grid.color = gridColor;
+                powerChartInstance.options.plugins.legend.labels.color = textColor;
+                powerChartInstance.update('none');
+            }
+        }
+
+        // --- Data & Logic Functions ---
+        
+        function parseCSV(csvText) {
+            const lines = csvText.split('\n');
+            if (lines.length < 2) return logEvent('Empty CSV.', 'error');
+
+            headers = lines[0].split(',').map(h => h.trim());
+            
+            const simpleHeaders = ['timestamp', 'note', 'soil_moisture_percent', 'valve_1_status', 'tank_pump_status', 'power_source'];
+            historyTableHeader.innerHTML = '';
+            simpleHeaders.forEach(h => {
+                const th = document.createElement('th');
+                th.className = "px-4 py-2";
+                th.textContent = h.replace(/_/g, ' ');
+                historyTableHeader.appendChild(th);
+            });
+            
+            dataset = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line === '') continue;
+                const values = line.split(',');
+                if (values.length !== headers.length) continue;
+                
+                try {
+                    const row = {};
+                    headers.forEach((h, index) => { row[h] = values[index].trim(); });
+                    if (isNaN(new Date(row.timestamp).getTime())) throw new Error('Invalid timestamp');
+                    dataset.push(row);
+                } catch (error) {
+                    logEvent(`Skipping row ${i+1}: ${error.message}`, 'warn');
+                }
+            }
+            currentPage = 1;
+            logEvent(`Parsed ${dataset.length} data rows.`, 'event');
+            updateAllUI();
+        }
+        
+        function runSimulationStep() {
+            const lastRow = getLastRow();
+            if (!lastRow) return;
+            
+            const newRow = { ...lastRow };
+            newRow.timestamp = new Date().toISOString();
+            
+            const isIrrigating = newRow.valve_1_status === 'ON' || newRow.valve_2_status === 'ON' || newRow.valve_3_status === 'ON';
+            const isRefilling = newRow.tank_pump_status === 'ON';
+            
+            // 1. Water Level Simulation
+            let waterChange = isIrrigating ? -0.5 : -0.05; // Irrigation drain
+            if (isRefilling) {
+                waterChange += 5.0; // Pump fills fast
+            }
+            newRow.water_level_percent = clamp(parseFloat(lastRow.water_level_percent) + waterChange, 0, 100).toFixed(0);
+            
+            // 2. Soil Simulation
+            let soilChange = -0.5; // Natural drying
+            if (newRow.valve_1_status === 'ON') soilChange += 1.5;
+            if (newRow.valve_2_status === 'ON') soilChange += 1.0;
+            if (newRow.valve_3_status === 'ON') soilChange += 0.8;
+            newRow.soil_moisture_percent = clamp(parseFloat(lastRow.soil_moisture_percent) + soilChange + (Math.random()*0.2-0.1), 0, 100).toFixed(0);
+
+            // 3. Sensor Simulation
+            newRow.temperature_c = (parseFloat(lastRow.temperature_c) + (Math.random() * 0.2 - 0.1)).toFixed(1);
+            newRow.humidity_percent = clamp(parseFloat(lastRow.humidity_percent) + (Math.random() * 2 - 1), 20, 90).toFixed(0);
+            newRow.light_lux = clamp(parseFloat(lastRow.light_lux) + (Math.random() * 1000 - 500), 0, 50000).toFixed(0);
+            newRow.rain_mm_per_hour = Math.random() < 0.05 ? (Math.random() * 2).toFixed(1) : '0.0'; 
+            newRow.wind_speed_kph = clamp(parseFloat(lastRow.wind_speed_kph) + (Math.random() * 1 - 0.5), 0, 40).toFixed(1);
+            
+            // 4. Power Simulation
+            const isDay = parseFloat(newRow.light_lux) > 1000;
+            newRow.solar_voltage = isDay ? (15.0 + Math.random() * 4).toFixed(2) : '0.00';
+            let current = -10;
+            if (isDay && parseFloat(newRow.battery_voltage) < 4.15) {
+                current += (parseFloat(newRow.solar_voltage) * 100);
+            }
+            newRow.battery_voltage = clamp(parseFloat(lastRow.battery_voltage) + (current / 50000), 3.0, 4.2).toFixed(2);
+            
+            let kwh = parseFloat(lastRow.total_power_consumption_kwh);
+            let gridV = 0.0;
+            const isPumping = isIrrigating || isRefilling;
+
+            if (isPumping) {
+                if (isDay && parseFloat(newRow.solar_voltage) > 12) {
+                    newRow.power_source = 'Solar';
+                } else if (parseFloat(newRow.battery_voltage) > 3.5) {
+                    newRow.power_source = 'Battery';
+                } else {
+                    newRow.power_source = 'Grid'; 
+                    gridV = 220 + Math.random() * 10;
+                    kwh += 0.05; // Pump uses 0.05 kWh per 5 sec
+                }
+            } else {
+                newRow.power_source = (isDay && parseFloat(newRow.solar_voltage) > 5) ? 'Solar' : 'Battery';
+            }
+            newRow.grid_voltage_v = gridV.toFixed(1);
+            newRow.total_power_consumption_kwh = kwh.toFixed(2);
+
+            // 5. Logic Checks
+            newRow.note = 'Simulated row';
+            newRow.system_mode = systemMode; 
+            
+            if (systemMode === 'AUTOMATIC') {
+                checkAutoRefillLogic(newRow); // Check tank pump first
+                checkIrrigationLogic(newRow); // Then check irrigation
+            }
+            
+            dataset.push(newRow);
+            
+            updateAllUI();
+        }
+        
+        // NEW: Logic for Tank Refill Pump
+        function checkAutoRefillLogic(newRow) {
+            if (!isAutoRefill) {
+                // if auto-refill is off, make sure pump is off
+                if (newRow.tank_pump_status === 'ON') {
+                    newRow.tank_pump_status = 'OFF';
+                    newRow.tank_pump_relay = 'LOW';
+                    newRow.note = 'Auto-Refill is OFF.';
+                }
+                return; 
+            }
+            
+            const water = parseFloat(newRow.water_level_percent);
+            
+            if (newRow.tank_pump_status === 'OFF' && water < autoConfig.tankLow) {
+                newRow.tank_pump_status = 'ON';
+                newRow.tank_pump_relay = 'HIGH';
+                newRow.note = 'Auto: Tank pump ON';
+            } else if (newRow.tank_pump_status === 'ON' && water >= autoConfig.tankHigh) {
+                newRow.tank_pump_status = 'OFF';
+                newRow.tank_pump_relay = 'LOW';
+                newRow.note = 'Auto: Tank pump OFF (Full)';
+            }
+        }
+        
+        function checkIrrigationLogic(newRow) {
+            const soil = parseFloat(newRow.soil_moisture_percent);
+            const water = parseFloat(newRow.water_level_percent);
+            const rain = parseFloat(newRow.rain_mm_per_hour);
+            
+            // Global check: stop all if raining or no water
+            if (rain > 0.1 || water <= autoConfig.onWater) {
+                if (newRow.valve_1_status === 'ON') {
+                    newRow.valve_1_status = 'OFF';
+                    newRow.note = rain > 0.1 ? "Auto-OFF: Raining" : "Auto-OFF: Irrigation Tank Low";
+                }
+                return;
+            }
+            
+            if (newRow.valve_1_status === 'OFF' && soil < autoConfig.onSoil && water > autoConfig.onWater) {
+                newRow.valve_1_status = 'ON';
+                newRow.note = 'Auto-ON: Zone 1 Soil Dry';
+            } else if (newRow.valve_1_status === 'ON' && soil >= autoConfig.offSoil) {
+                newRow.valve_1_status = 'OFF';
+                newRow.note = 'Auto-OFF: Zone 1 Soil Good';
+            }
+        }
+        
+        function addNewEventRowWithChanges(changes = {}, note = 'Event') {
+            const lastRow = getLastRow();
+            if (!lastRow) return;
+            
+            const newRow = { ...lastRow, timestamp: new Date().toISOString(), note: note };
+            
+            for (const key in changes) {
+                newRow[key] = changes[key];
+            }
+            
+            if (newRow.system_mode === 'AUTOMATIC') {
+                checkAutoRefillLogic(newRow);
+                checkIrrigationLogic(newRow); 
+            }
+            
+            dataset.push(newRow);
+            updateAllUI();
+        }
+        
+        function renderHistoryTable() {
+            historyTableBody.innerHTML = '';
+            if (dataset.length === 0) {
+                 historyTableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500">No data to display.</td></tr>`;
+                 updatePaginationControls();
+                 return;
+            }
+            
+            const simpleHeaders = ['timestamp', 'note', 'soil_moisture_percent', 'valve_1_status', 'tank_pump_status', 'power_source'];
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            const paginatedData = dataset.slice().reverse().slice(start, end);
+            
+            paginatedData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800";
+                simpleHeaders.forEach(header => {
+                    const td = document.createElement('td');
+                    td.className = "px-4 py-2";
+                    let val = row[header];
+                    if (header === 'timestamp') {
+                        td.textContent = formatTimestamp(val);
+                    } else {
+                        td.textContent = val;
+                    }
+                    tr.appendChild(td);
+                });
+                historyTableBody.appendChild(tr);
+            });
+            updatePaginationControls();
+        }
+        
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(dataset.length / rowsPerPage);
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages || 1}`;
+            prevPageBtn.disabled = (currentPage === 1);
+            nextPageBtn.disabled = (currentPage === totalPages || totalPages === 0);
+        }
+        
+        // --- Simulator Functions ---
+        
+        function resetVisualSimulation() {
+            const elements = [simSoil, simWater, simRain, simTemp, simLogic, simValve1, simValve2, simValve3, simTankPump, simArrow1, simArrow2];
+            elements.forEach(el => {
+                el.classList.remove('active-sensor', 'active-logic', 'active-action', 'active-fail', 'active');
+            });
+            simStatus.textContent = 'Waiting for test...';
+        }
+        
+        function runVisualSimulation(scenario) {
+            resetVisualSimulation();
+            
+            if (scenario === 'dry') {
+                simStatus.textContent = 'Input: Soil is DRY.';
+                simSoil.classList.add('active-sensor');
+                simWater.classList.add('active-sensor');
+                simRain.classList.add('active-sensor');
+                simTemp.classList.add('active-sensor');
+                setTimeout(() => simArrow1.classList.add('active'), 400);
+                setTimeout(() => simLogic.classList.add('active-logic'), 800);
+                setTimeout(() => simStatus.textContent = 'Logic: Soil DRY + Tank OK + No Rain...', 800);
+                setTimeout(() => simArrow2.classList.add('active'), 1200);
+                setTimeout(() => simValve1.classList.add('active-action'), 1600);
+                setTimeout(() => simTankPump.classList.add('active-fail'), 1600); // Show tank pump is OFF
+                setTimeout(() => simStatus.textContent = 'Output: Turning ON Zone 1.', 1600);
+                
+            } else if (scenario === 'rain') {
+                simStatus.textContent = 'Input: It is RAINING.';
+                simRain.classList.add('active-fail');
+                setTimeout(() => simArrow1.classList.add('active'), 400);
+                setTimeout(() => simLogic.classList.add('active-logic'), 800);
+                setTimeout(() => simStatus.textContent = 'Logic: Rain detected. STOP.', 800);
+                setTimeout(() => simArrow2.classList.add('active'), 1200);
+                setTimeout(() => simValve1.classList.add('active-fail'), 1600);
+                setTimeout(() => simTankPump.classList.add('active-fail'), 1600);
+                setTimeout(() => simStatus.textContent = 'Output: Watering PAUSED.', 1600);
+                
+            } else if (scenario === 'empty') {
+                simStatus.textContent = 'Input: Water Tank is EMPTY.';
+                simWater.classList.add('active-fail');
+                setTimeout(() => simArrow1.classList.add('active'), 400);
+                setTimeout(() => simLogic.classList.add('active-logic'), 800);
+                setTimeout(() => simStatus.textContent = 'Logic: Tank Empty! Starting Refill Pump.', 800);
+                setTimeout(() => simArrow2.classList.add('active'), 1200);
+                setTimeout(() => simValve1.classList.add('active-fail'), 1600); // Irrigation OFF
+                setTimeout(() => simTankPump.classList.add('active-action'), 1600); // Tank Pump ON
+                setTimeout(() => simStatus.textContent = 'Output: Irrigation STOPPED. Refill Pump ON.', 1600);
+            }
+        }
+        
+        // --- Farm Logbook Functions ---
+        function saveLogbookEntry() {
+            const activity = logbookActivity.value;
+            const notes = logbookNotes.value.trim();
+            if (notes === "") {
+                alert("Please add a note.");
+                return;
+            }
+            
+            const entry = {
+                id: Date.now(),
+                date: new Date().toLocaleString(),
+                activity: activity,
+                notes: notes
+            };
+            
+            let logs = JSON.parse(localStorage.getItem('farmLogs')) || [];
+            logs.unshift(entry); // Add new entry to the top
+            localStorage.setItem('farmLogs', JSON.stringify(logs));
+            
+            logbookNotes.value = '';
+            loadLogbookEntries();
+        }
+        
+        function loadLogbookEntries() {
+            let logs = JSON.parse(localStorage.getItem('farmLogs')) || [];
+            if (logs.length === 0) {
+                logbookHistory.innerHTML = '<p class="text-xs text-center text-gray-500 dark:text-gray-400">Your saved notes will appear here.</p>';
+                return;
+            }
+            
+            let html = '';
+            logs.slice(0, 10).forEach(entry => { // Show last 10
+                html += `
+                    <div class="border-b border-gray-200 dark:border-gray-700 pb-2">
+                        <p class="text-sm font-bold">${entry.activity}: <span class="font-normal">${entry.notes}</span></p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${entry.date}</p>
+                    </div>
+                `;
+            });
+            logbookHistory.innerHTML = html;
+        }
+
+        // --- Event Handlers ---
+        
+        function handleExport() {
+            if (dataset.length === 0) return logEvent('No data to export.', 'warn');
+            const csvHeader = headers.join(',');
+            const csvRows = dataset.map(row => 
+                headers.map(header => `"${(row[header] ?? '').toString().replace(/"/g, '""')}"`).join(',')
+            );
+            const csvContent = [csvHeader, ...csvRows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'farmer_data_export.csv';
+            link.click();
+            URL.revokeObjectURL(link.href);
+            logEvent('Data exported.', 'event');
+        }
+        
+        function handleNavClick(event) {
+            const clickedItem = event.target.closest('.nav-item');
+            if (!clickedItem) return;
+            
+            const pageName = clickedItem.dataset.page;
+            
+            pages.forEach(page => page.classList.remove('active'));
+            document.getElementById(`page-${pageName}`).classList.add('active');
+            
+            navItems.forEach(item => item.classList.remove('active'));
+            clickedItem.classList.add('active');
+            
+            // Re-draw charts if their page is now visible
+            if ((pageName === 'history' || pageName === 'sensors') && dataset.length > 0) {
+                setTimeout(() => {
+                    if (pageName === 'history') updateChartData('main');
+                    if (pageName === 'sensors') updateChartData('power');
+                }, 50);
+            }
+            if (pageName === 'history') {
+                renderHistoryTable();
+            }
+            if (pageName === 'cropcare') {
+                updateCropCarePage();
+            }
+            if (pageName === 'controls') {
+                loadLogbookEntries();
+            }
+        }
+        
+        function handleSystemModeChange(event) {
+            const newMode = event.target.value;
+            systemMode = newMode; // Update global state
+            logEvent(`System mode changed to ${newMode}.`, 'config');
+            addNewEventRowWithChanges({ system_mode: newMode }, `Mode changed to ${newMode}`);
+        }
+        
+        function handleValveToggle(event) {
+            if (systemMode !== 'MANUAL') return;
+            
+            const button = event.target.closest('.valve-toggle');
+            const valveNum = button.dataset.valve;
+            const currentStatus = getLastRow()[`valve_${valveNum}_status`];
+            const newState = (currentStatus === 'ON') ? 'OFF' : 'ON';
+            
+            logEvent(`Manual: Zone ${valveNum} set to ${newState}.`, 'manual');
+            addNewEventRowWithChanges({
+                [`valve_${valveNum}_status`]: newState,
+                system_mode: 'MANUAL'
+            }, `Manual: Zone ${valveNum} ${newState}`);
+        }
+
+        function handlePagination(direction) {
+            const totalPages = Math.ceil(dataset.length / rowsPerPage);
+            currentPage = clamp(currentPage + direction, 1, totalPages);
+            renderHistoryTable();
+        }
+
+        function handleThemeToggle() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            darkModeToggle.querySelector('.fa-moon').classList.toggle('hidden', isDark);
+            darkModeToggle.querySelector('.fa-sun').classList.toggle('hidden', !isDark);
+            logEvent(`Theme changed to ${isDark ? 'Dark' : 'Light'}.`, 'event');
+            
+            initCharts();
+            updateChartData('main');
+            updateChartData('power');
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // *** FIX: Assign all DOM elements *after* DOM has loaded ***
+            pages = document.querySelectorAll('.page');
+            navItems = document.querySelectorAll('.nav-item');
+            systemStatusCard = document.getElementById('system-status-card');
+            systemStatusIcon = document.getElementById('system-status-icon');
+            systemStatusText = document.getElementById('system-status-text');
+            systemStatusNote = document.getElementById('system-status-note');
+            weatherAlertCard = document.getElementById('weather-alert-card');
+            weatherAlertIcon = document.getElementById('weather-alert-icon');
+            weatherAlertText = document.getElementById('weather-alert-text');
+            soilValue = document.getElementById('soil-value');
+            soilStatusText = document.getElementById('soil-status-text');
+            waterValue = document.getElementById('water-value');
+            waterStatusText = document.getElementById('water-status-text');
+            tempValue = document.getElementById('temp-value');
+            rainValue = document.getElementById('rain-value');
+            batteryValue = document.getElementById('battery-value');
+            lastUpdated = document.getElementById('last-updated');
+            powerSourceValue = document.getElementById('power-source-value');
+            meterReadingValue = document.getElementById('meter-reading-value');
+            systemModeSelect = document.getElementById('system-mode-select');
+            manualControlsDisabledNote = document.getElementById('manual-controls-disabled-note');
+            manualControlsButtons = document.getElementById('manual-controls-buttons');
+            valveToggles = document.querySelectorAll('.valve-toggle');
+            logbookActivity = document.getElementById('logbook-activity');
+            logbookNotes = document.getElementById('logbook-notes');
+            logbookSave = document.getElementById('logbook-save');
+            logbookHistory = document.getElementById('logbook-history');
+            cropSelect = document.getElementById('crop-select');
+            cropcareTemp = document.getElementById('cropcare-temp');
+            cropcareHumidity = document.getElementById('cropcare-humidity');
+            tabBtnPest = document.getElementById('tab-btn-pest');
+            tabBtnFert = document.getElementById('tab-btn-fert');
+            tabContentPest = document.getElementById('tab-content-pesticides');
+            tabContentFert = document.getElementById('tab-content-fertilizer');
+            pesticideSuggestionsContainer = document.getElementById('pesticide-suggestions-container');
+            fertilizerStageSelect = document.getElementById('fertilizer-stage-select');
+            fertilizerSuggestionsContainer = document.getElementById('fertilizer-suggestions-container');
+            windSpeed = document.getElementById('wind-speed');
+            windDir = document.getElementById('wind-dir');
+            windArrow = document.getElementById('wind-arrow');
+            weatherRain = document.getElementById('weather-rain');
+            weatherLight = document.getElementById('weather-light');
+            weatherPressure = document.getElementById('weather-pressure');
+            powerSourceIcon = document.getElementById('power-source-icon');
+            powerSourceStatus = document.getElementById('power-source-status');
+            gridStatusIcon = document.getElementById('grid-status-icon');
+            gridStatusText = document.getElementById('grid-status-text');
+            powerBatteryIcon = document.getElementById('power-battery-icon');
+            powerBatteryValue = document.getElementById('power-battery-value');
+            powerBatteryStatus = document.getElementById('power-battery-status');
+            powerSolarIcon = document.getElementById('power-solar-icon');
+            powerSolarValue = document.getElementById('power-solar-value');
+            powerSolarStatus = document.getElementById('power-solar-status');
+            meterReadingKwh = document.getElementById('meter-reading-kwh');
+            tankLevelGauge = document.getElementById('tank-level-gauge');
+            tankLevelStatus = document.getElementById('tank-level-status');
+            tankPumpStatusText = document.getElementById('tank-pump-status-text');
+            autoRefillToggle = document.getElementById('auto-refill-toggle');
+            manualFillBtn = document.getElementById('manual-fill-btn');
+            mainChartCanvas = document.getElementById('main-chart').getContext('2d');
+            powerChartCanvas = document.getElementById('power-chart').getContext('2d');
+            historyTableHeader = document.getElementById('history-table-header');
+            historyTableBody = document.getElementById('history-table-body');
+            prevPageBtn = document.getElementById('prev-page-btn');
+            nextPageBtn = document.getElementById('next-page-btn');
+            pageInfo = document.getElementById('page-info');
+            exportCsvBtn = document.getElementById('export-csv');
+            simBtnDry = document.getElementById('sim-btn-dry');
+            simBtnRain = document.getElementById('sim-btn-rain');
+            simBtnEmpty = document.getElementById('sim-btn-empty');
+            simStatus = document.getElementById('sim-status');
+            simSoil = document.getElementById('sim-soil');
+            simWater = document.getElementById('sim-water');
+            simRain = document.getElementById('sim-rain');
+            simTemp = document.getElementById('sim-temp');
+            simLogic = document.getElementById('sim-logic');
+            simValve1 = document.getElementById('sim-valve-1');
+            simValve2 = document.getElementById('sim-valve-2');
+            simValve3 = document.getElementById('sim-valve-3');
+            simTankPump = document.getElementById('sim-tank-pump');
+            simArrow1 = document.getElementById('sim-arrow-1');
+            simArrow2 = document.getElementById('sim-arrow-2');
+            darkModeToggle = document.getElementById('dark-mode-toggle');
+            // *** END OF DOM ASSIGNMENT ***
+
+            logEvent('Farmer-friendly dashboard initialized.', 'event');
+            
+            // Bind listeners
+            document.querySelector('.bottom-nav').addEventListener('click', handleNavClick);
+            darkModeToggle.addEventListener('click', handleThemeToggle);
+            
+            exportCsvBtn.addEventListener('click', handleExport);
+            
+            systemModeSelect.addEventListener('change', handleSystemModeChange);
+            manualControlsButtons.addEventListener('click', handleValveToggle);
+            
+            prevPageBtn.addEventListener('click', () => handlePagination(-1));
+            nextPageBtn.addEventListener('click', () => handlePagination(1));
+
+            // Crop Care Listeners
+            cropSelect.addEventListener('change', updateCropCarePage);
+            fertilizerStageSelect.addEventListener('change', updateFertilizerSuggestions);
+            tabBtnPest.addEventListener('click', () => {
+                tabBtnPest.classList.add('active');
+                tabBtnFert.classList.remove('active');
+                tabContentPest.classList.add('active');
+                tabContentFert.classList.remove('active');
+            });
+            tabBtnFert.addEventListener('click', () => {
+                tabBtnFert.classList.add('active');
+                tabBtnPest.classList.remove('active');
+                tabContentFert.classList.add('active');
+                tabContentPest.classList.remove('active');
+            });
+            
+            // Logbook Listener
+            logbookSave.addEventListener('click', saveLogbookEntry);
+            
+            // Tank Pump Listeners
+            autoRefillToggle.addEventListener('change', (e) => {
+                isAutoRefill = e.target.checked;
+                logEvent(`Auto-Refill ${isAutoRefill ? 'ENABLED' : 'DISABLED'}.`, 'config');
+            });
+            manualFillBtn.addEventListener('click', () => {
+                if (systemMode === 'OFFLINE') return;
+                logEvent('Manual: Tank Fill ON.', 'manual');
+                addNewEventRowWithChanges({ tank_pump_status: 'ON', tank_pump_relay: 'HIGH' }, 'Manual: Tank Fill ON');
+            });
+
+            // Simulator Buttons
+            simBtnDry.addEventListener('click', () => {
+                runVisualSimulation('dry');
+                addNewEventRowWithChanges({ 
+                    soil_moisture_percent: '30', rain_mm_per_hour: '0.0', 
+                    water_level_percent: '80', system_mode: 'AUTOMATIC' 
+                }, 'Sim: Soil is Dry');
+            });
+            simBtnRain.addEventListener('click', () => {
+                runVisualSimulation('rain');
+                addNewEventRowWithChanges({ rain_mm_per_hour: '2.5', system_mode: 'AUTOMATIC' }, 'Sim: It is Raining');
+            });
+            simBtnEmpty.addEventListener('click', () => {
+                runVisualSimulation('empty');
+                addNewEventRowWithChanges({ water_level_percent: '5', system_mode: 'AUTOMATIC' }, 'Sim: Tank Empty');
+            });
+            
+            // Load initial config
+            autoConfig = { onSoil: 40, offSoil: 50, onWater: 15, offWater: 10, tankLow: 20, tankHigh: 95 };
+            
+            initCharts();
+            parseCSV(defaultCSVString);
+            
+            // Auto-start the simulation
+            logEvent('Live simulation started.', 'event');
+            simulationInterval = setInterval(runSimulationStep, 5000); // 5 seconds
+        });
+
+    </script>
+</body>
+</html>
