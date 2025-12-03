@@ -1,13 +1,6 @@
 
 Smart Irrigation System – Web Simulation Interface
 ==================================================
-🎓 Semester 3 Project – Design Thinking & Methodology
-Course: Design Thinking & Methodology (DTM)
-Team: 6 Members (Group Project)
-
-💡 Project Overview
-This project, titled “Smart Irrigation System – Web Simulation Interface”, is a complete 
-frontend-only web application that simulates how a smart irrigation system works.
 
 The system is developed using HTML, CSS, JavaScript and is designed in a way that 
 real sensors and hardware can be connected to it in the future. 
